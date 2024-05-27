@@ -93,6 +93,11 @@ def _kirua_generator(
 
 
 class KiruaBuilder(BaseBuilder):
+    AVAILABLE_INPUT_IDS_DTYPES: list = [np.uint16, np.uint32]
+    GENE_NAME_FILE: str = "gene_names.txt"
+    FILES_FILE: str = "files.txt"
+    BUILDER_CONFIG_FILE: str = "builder_config.json"
+
     def __init__(
         self,
         config: BuilderConfig,
@@ -103,11 +108,11 @@ class KiruaBuilder(BaseBuilder):
     ):
         super().__init__(config)
         self._files = set()
-        self._gene_names = gene_names
+        self._gene_names = list(gene_names)
 
         # infer input_ids dtype based on the num of genes (if less than 2^16, use uint16, else use uint32)
         self._input_ids_dtype = None
-        for t in [np.uint16, np.uint32]:
+        for t in KiruaBuilder.AVAILABLE_INPUT_IDS_DTYPES:
             if len(gene_names) <= (np.iinfo(t).max) + 1:
                 self._input_ids_dtype = t
                 break
@@ -187,11 +192,11 @@ class KiruaBuilder(BaseBuilder):
     def save_dataset_meta(self, path: str):
         p = Path(path)
         p.mkdir(parents=True, exist_ok=True)
-        with open(p / "gene_names.txt", "w") as f:
+        with open(p / KiruaBuilder.GENE_NAME_FILE, "w") as f:
             f.write("\n".join(self._gene_names))
 
-        with open(p / "files.txt", "w") as f:
+        with open(p / KiruaBuilder.FILES_FILE, "w") as f:
             f.write("\n".join([str(file) for file in self._files]))
 
-        with open(p / "builder_config.json", "w") as f:
+        with open(p / KiruaBuilder.BUILDER_CONFIG_FILE, "w") as f:
             json.dump(self._config.__dict__, f, indent=2)

@@ -33,12 +33,18 @@ class TestKiruaBuilder(unittest.TestCase):
             builder = KiruaBuilder(config, gene_names=gene_names)
             files = []
             n_cells = 0
+            ds_idx_to_test = 0
+            cell_idx_to_test = 1
+
             for i in range(5):
                 obs_size = np.random.randint(10, 20)
                 var_size = np.random.randint(3, 10)
 
                 n_cells += obs_size
                 adata = make_h5ad(shape=(obs_size, var_size))
+                if i == ds_idx_to_test and adata.X[cell_idx_to_test].nnz == 0:
+                    # make sure there is at least one non-zero value in the cell to test
+                    adata.X[cell_idx_to_test] = np.random.rand(var_size)
                 file_name = tmpdir_path / f"adata_{i}.h5ad"
                 adata.write_h5ad(file_name)
                 files.append(file_name)
@@ -62,15 +68,15 @@ class TestKiruaBuilder(unittest.TestCase):
             )
 
             # check the data in the dataset
-            ds_idx_to_test = 0
-            cell_idx_to_test = 1
-            
+
             adata = ad.read_h5ad(files[ds_idx_to_test])
             adata = adata[:, gene_names]
 
-            ds_0_cell_1_original_x = (adata.X if not config.use_raw else adata.raw.X)[
-                cell_idx_to_test
-            ]
+            ds_0_cell_1_original_x = (
+                (adata.X if not config.use_raw else adata.raw.X)[cell_idx_to_test]
+                .toarray()
+                .flatten()
+            )
             non_zero = ds_0_cell_1_original_x[ds_0_cell_1_original_x > 0.0]
 
             record_in_ds = ds.filter(
@@ -80,7 +86,7 @@ class TestKiruaBuilder(unittest.TestCase):
 
             self.assertTrue(
                 (non_zero == record_in_ds["exprs"]).all(),
-                "Expression data is not correct",
+                f"Expression data is not correct, exprs in adata: {non_zero}, exprs in dataset: {record_in_ds['exprs']}",
             )
 
 
