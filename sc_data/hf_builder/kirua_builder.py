@@ -136,20 +136,25 @@ class KiruaBuilder(BaseBuilder):
             self._files.add(file)
         return self
 
+    @property
+    def files(self):
+        return sorted(list(self._files))
+
     def files_stat(self):
-        print(f"Number of files: {len(self._files)}")
+        files = self.files
+        print(f"Number of files: {len(files)}")
         print("Files cell num:")
         cell_count = 0
-        for f in self._files:
+        for f in files:
             adata = ad.read_h5ad(f, backed="r")
             print(f"{f}: {adata.n_obs}")
             cell_count += adata.n_obs
         print(f"Total cell count: {cell_count}")
 
     def build(self) -> datasets.Dataset:
-        assert len(self._files) > 0, "No files added"
-        print(f"Start building dataset from {len(self._files)} files")
-        files = sorted(list(self._files))
+        files = self.files
+        assert len(files) > 0, "No files added"
+        print(f"Start building dataset from {len(files)} files")
         print("files:")
         if len(files) > 5:
             print("\n".join([str(f) for f in files[:4]] + ["..."] + [str(files[-1])]))

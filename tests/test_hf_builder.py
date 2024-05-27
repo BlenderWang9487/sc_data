@@ -26,11 +26,11 @@ class TestKiruaBuilder(unittest.TestCase):
             self.assertWarns(UserWarning, builder.add_files, [fname, fname])
 
     def test_build_default(self):
-        config = BuilderConfig()
-        builder = KiruaBuilder(config, ["gene_0", "gene_1"])
-
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
+            config = BuilderConfig(cache_dir=str(tmpdir_path / ".cache"))
+            gene_names = ["gene_0", "gene_1"]
+            builder = KiruaBuilder(config, gene_names=gene_names)
             files = []
             n_cells = 0
             for i in range(5):
@@ -44,6 +44,9 @@ class TestKiruaBuilder(unittest.TestCase):
                 files.append(file_name)
 
             ds = builder.add_files(files).build()
+            ds.set_format("np")
+
+            files = builder.files
 
             self.assertEqual(len(ds), n_cells, "Number of cells is not correct")
 
@@ -56,6 +59,28 @@ class TestKiruaBuilder(unittest.TestCase):
                 "dataset_idx",
                 ds.features.keys(),
                 "by default dataset_idx should be in features",
+            )
+
+            # check the data in the dataset
+            ds_idx_to_test = 0
+            cell_idx_to_test = 1
+            
+            adata = ad.read_h5ad(files[ds_idx_to_test])
+            adata = adata[:, gene_names]
+
+            ds_0_cell_1_original_x = (adata.X if not config.use_raw else adata.raw.X)[
+                cell_idx_to_test
+            ]
+            non_zero = ds_0_cell_1_original_x[ds_0_cell_1_original_x > 0.0]
+
+            record_in_ds = ds.filter(
+                lambda x: x["dataset_idx"] == ds_idx_to_test
+                and x["cell_idx"] == cell_idx_to_test
+            )[0]
+
+            self.assertTrue(
+                (non_zero == record_in_ds["exprs"]).all(),
+                "Expression data is not correct",
             )
 
 
