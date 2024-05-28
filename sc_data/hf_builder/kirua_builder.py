@@ -1,17 +1,34 @@
 import json
 from functools import partial
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Generator, Iterable
 from warnings import warn
 
 import anndata as ad
 import datasets
 import numpy as np
+from anndata._core.sparse_dataset import CSRDataset
 from scipy.sparse import csr_matrix
 
 from .base_builder import BaseBuilder, BuilderConfig
 
 AdditionalFeatureCallbackType = Callable[[ad.AnnData, int], dict]
+
+
+def _mem_efficient_csr_matrix_filtering(
+    X: csr_matrix,
+    row_start: int,
+    row_end: int,
+    col_bool_mask: np.ndarray,
+):
+    # **Note: X must be a csr_matrix to make the following code memory efficient**
+
+    # row filtering on backed HDF5 CSR won't break the backed mode, and will transfer the selected data to memory
+    x_sparse = X[row_start:row_end]
+
+    # if X is not csr_matrix, this will make sure x_sparse is csr_matrix
+    x_sparse = csr_matrix(x_sparse[:, col_bool_mask])
+    return x_sparse
 
 
 def _kirua_generator(
@@ -56,14 +73,26 @@ def _kirua_generator(
         chunks = list(range(0, len(adata), chunk_size))
 
         X = adata.X if not use_raw else adata.raw.X
+        if backed_mode is not None and not isinstance(X, CSRDataset):
+            warn(
+                f"You are using backed mode: {backed_mode}, but the X is not in CSR format"
+                f" (it's {type(X)}), this will make the filtering process slower"
+                " since the row seletion will break the backed mode and transfer all the data to memory."
+            )
 
         for chunk in chunks:
-            x_sparse: csr_matrix = X[chunk : chunk + chunk_size, var_filter]
+            x_sparse = _mem_efficient_csr_matrix_filtering(
+                X=X,
+                row_start=chunk,
+                row_end=(chunk + chunk_size),
+                col_bool_mask=var_filter,
+            )
             indptr = x_sparse.indptr
             data = x_sparse.data.astype(np.float32)
             indices = x_sparse.indices
 
-            for i, (start, end) in enumerate(zip(indptr[:-1], indptr[1:])):
+            se_list = list(zip(indptr[:-1], indptr[1:]))
+            for i, (start, end) in enumerate(se_list):
                 exprs = data[start:end]
 
                 # even if the x is sparse, some zeros are still there, need to filter them
@@ -74,6 +103,9 @@ def _kirua_generator(
                 input_ids = input_ids_array[col]
 
                 # datasets.Array2D somehow very fast compare to datasets.Sequence(datasets.Value)
+                #  if we "strickly specify" the datasets.Features. But if we don', this 1d np.ndarray
+                #  will be auto detected as datasets.Sequence(datasets.Value) and keep the same speed as datasets.Array2D
+                # This is a bit weird, but it's fine for us to not specifiy Features type for now
                 features = {
                     "input_ids": input_ids,
                     "exprs": exprs,
@@ -156,7 +188,17 @@ class KiruaBuilder(BaseBuilder):
             cell_count += adata.n_obs
         print(f"Total cell count: {cell_count}")
 
-    def build(self) -> datasets.Dataset:
+    def build(self, return_generator: bool = False) -> datasets.Dataset | Generator:
+        """Build the dataset or return the generator
+
+        Args:
+            return_generator (bool, optional): return a generator for `datasets.Dataset.from_generator`
+                *Note: you should pass gen_kwargs={"idx_h5ad_files": list[tuple[int, str]]} to `from_generator`
+                if you set return_generator to True. Defaults to False.
+
+        Returns:
+            datasets.Dataset | Generator: the built dataset or the generator
+        """
         files = self.files
         assert len(files) > 0, "No files added"
         print(f"Start building dataset from {len(files)} files")
@@ -179,6 +221,9 @@ class KiruaBuilder(BaseBuilder):
             callback=self._additional_features_callback,
             input_ids_dtype=self._input_ids_dtype,
         )
+
+        if return_generator:
+            return generator
 
         ds = datasets.Dataset.from_generator(
             generator,

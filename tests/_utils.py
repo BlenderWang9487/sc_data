@@ -20,6 +20,7 @@ def make_h5ad(
 
     if isinstance(X, np.ndarray):
         X = csr_matrix(X)
+    X = X.astype(np.float32)
 
     n_obs = X.shape[0]
     n_var = X.shape[1]

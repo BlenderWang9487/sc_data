@@ -1,5 +1,6 @@
 import abc
 from dataclasses import dataclass
+from typing import Generator
 
 import datasets
 
@@ -25,5 +26,5 @@ class BaseBuilder(abc.ABC):
         self._config = config
 
     @abc.abstractmethod
-    def build(self) -> datasets.Dataset | datasets.DatasetDict:
+    def build(self) -> datasets.Dataset | datasets.DatasetDict | Generator:
         raise NotImplementedError("build must be implemented")
