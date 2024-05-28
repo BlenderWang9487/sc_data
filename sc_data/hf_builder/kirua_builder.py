@@ -1,4 +1,5 @@
 import json
+import os
 from functools import partial
 from pathlib import Path
 from typing import Any, Callable, Generator, Iterable
@@ -43,6 +44,13 @@ def _kirua_generator(
     input_ids_dtype: np.dtypes.UIntDType,
 ):
     for dataset_idx, h5ad_file in idx_h5ad_files:
+        # first check the file is empty or not
+        if os.stat(h5ad_file).st_size == 0:
+            warn(
+                f"dataset idx: {dataset_idx}, File {h5ad_file} is empty, skip this file"
+            )
+            continue
+
         adata = ad.read_h5ad(h5ad_file, backed=backed_mode)
 
         if isinstance(gene_col_in_var_hint, str) or isinstance(
@@ -53,7 +61,7 @@ def _kirua_generator(
             adata_gene_col = None
             for gene_col in gene_col_in_var_hint:
                 if gene_col in adata.var.columns:
-                    adata_gene_col = adata.obs[gene_col]
+                    adata_gene_col = adata.var[gene_col]
                     break
             if adata_gene_col is None:
                 warn(
