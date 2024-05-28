@@ -26,5 +26,5 @@ class BaseBuilder(abc.ABC):
         self._config = config
 
     @abc.abstractmethod
-    def build(self) -> datasets.Dataset | datasets.DatasetDict | Generator:
+    def build(self, **kwargs) -> datasets.Dataset | datasets.DatasetDict | Generator:
         raise NotImplementedError("build must be implemented")

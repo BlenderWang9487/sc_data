@@ -1,7 +1,7 @@
 import json
 from functools import partial
 from pathlib import Path
-from typing import Callable, Generator, Iterable
+from typing import Any, Callable, Generator, Iterable
 from warnings import warn
 
 import anndata as ad
@@ -12,7 +12,7 @@ from scipy.sparse import csr_matrix
 
 from .base_builder import BaseBuilder, BuilderConfig
 
-AdditionalFeatureCallbackType = Callable[[ad.AnnData, int], dict]
+AdditionalFeatureCallbackType = Callable[[ad.AnnData, int, int], dict[str, Any]]
 
 
 def _mem_efficient_csr_matrix_filtering(
@@ -117,7 +117,7 @@ def _kirua_generator(
                     features["dataset_idx"] = dataset_idx
 
                 if callback is not None:
-                    features.update(callback(adata, cell_idx))
+                    features.update(callback(adata, dataset_idx, cell_idx))
                 yield features
 
             del x_sparse
