@@ -8,12 +8,16 @@ from warnings import warn
 import anndata as ad
 import datasets
 import numpy as np
+import pandas as pd
 from anndata._core.sparse_dataset import CSRDataset
 from scipy.sparse import csr_matrix
 
 from .base_builder import BaseBuilder, BuilderConfig
-
-AdditionalFeatureCallbackType = Callable[[ad.AnnData, int, int], dict[str, Any]]
+from .callbacks import (
+    AdditionalFeaturesCallbackType,
+    GeneNamesCallbackType,
+    KiruaGeneralGeneNamesCallback,
+)
 
 
 def _mem_efficient_csr_matrix_filtering(
@@ -39,8 +43,8 @@ def _kirua_generator(
     use_cell_id_features: bool,
     use_raw: bool,
     gene_names: Iterable[str],
-    gene_col_in_var_hint: str | list[str] | None,
-    callback: AdditionalFeatureCallbackType | None,
+    additional_features_callback: AdditionalFeaturesCallbackType | None,
+    gene_names_callback: GeneNamesCallbackType,
     input_ids_dtype: np.dtypes.UIntDType,
 ):
     for dataset_idx, h5ad_file in idx_h5ad_files:
@@ -53,25 +57,10 @@ def _kirua_generator(
 
         adata = ad.read_h5ad(h5ad_file, backed=backed_mode)
 
-        if isinstance(gene_col_in_var_hint, str) or isinstance(
-            gene_col_in_var_hint, list
-        ):
-            if isinstance(gene_col_in_var_hint, str):
-                gene_col_in_var_hint = [gene_col_in_var_hint]
-            adata_gene_col = None
-            for gene_col in gene_col_in_var_hint:
-                if gene_col in adata.var.columns:
-                    adata_gene_col = adata.var[gene_col]
-                    break
-            if adata_gene_col is None:
-                warn(
-                    f"None of the hint columns {gene_col_in_var_hint} found in the file {h5ad_file}'s adata.var, "
-                    f"fallback to adata.var_names instead"
-                )
-                adata_gene_col = adata.var_names
-        elif gene_col_in_var_hint is None:
-            adata_gene_col = adata.var_names
+        # get the gene names from the adata
+        adata_gene_col = pd.Series(gene_names_callback(adata, dataset_idx))
 
+        # filter the gene names based on `gene_names`
         gene2id = {gene: i for i, gene in enumerate(gene_names)}
         var_filter = adata_gene_col.isin(gene2id)
 
@@ -124,8 +113,10 @@ def _kirua_generator(
                     features["cell_idx"] = cell_idx
                     features["dataset_idx"] = dataset_idx
 
-                if callback is not None:
-                    features.update(callback(adata, dataset_idx, cell_idx))
+                if additional_features_callback is not None:
+                    features.update(
+                        additional_features_callback(adata, dataset_idx, cell_idx)
+                    )
                 yield features
 
             del x_sparse
@@ -143,8 +134,8 @@ class KiruaBuilder(BaseBuilder):
         config: BuilderConfig,
         gene_names: Iterable[str],
         use_cell_id_features: bool = True,
-        gene_col_in_var_hint: str | list[str] | None = None,
-        additional_features_callback: AdditionalFeatureCallbackType | None = None,
+        additional_features_callback: AdditionalFeaturesCallbackType | None = None,
+        gene_names_callback: GeneNamesCallbackType | None = None,
     ):
         super().__init__(config)
         self._files = set()
@@ -159,13 +150,18 @@ class KiruaBuilder(BaseBuilder):
         if self._input_ids_dtype is None:
             raise ValueError("Too many genes, cannot fit in uint16 or uint32")
 
-        self._gene_col_in_var_hint = gene_col_in_var_hint
-
         # whether to add cell id (dataset id + cell indices) as features
         self._use_cell_id_features = use_cell_id_features
 
         # callback to add additional features
         self._additional_features_callback = additional_features_callback
+
+        # callback to get gene names
+        self._gene_names_callback = (
+            gene_names_callback
+            if gene_names_callback is not None
+            else KiruaGeneralGeneNamesCallback()
+        )
 
     def add_files(self, files: Iterable[str]) -> "KiruaBuilder":
         for f in files:
@@ -185,16 +181,21 @@ class KiruaBuilder(BaseBuilder):
     def files(self):
         return sorted(list(self._files))
 
-    def files_stat(self):
+    def files_stat(self) -> dict[str, Any]:
         files = self.files
-        print(f"Number of files: {len(files)}")
-        print("Files cell num:")
+        num_files = len(files)
         cell_count = 0
+        cell_per_files = dict()
         for f in files:
             adata = ad.read_h5ad(f, backed="r")
-            print(f"{f}: {adata.n_obs}")
+            cell_per_files[f] = adata.n_obs
             cell_count += adata.n_obs
-        print(f"Total cell count: {cell_count}")
+        total_cells = cell_count
+        return {
+            "num_files": num_files,
+            "total_cells": total_cells,
+            "cell_per_files": cell_per_files,
+        }
 
     def build(self, return_generator: bool = False) -> datasets.Dataset | Generator:
         """Build the dataset or return the generator
@@ -225,8 +226,8 @@ class KiruaBuilder(BaseBuilder):
             use_cell_id_features=self._use_cell_id_features,
             use_raw=self._config.use_raw,
             gene_names=self._gene_names,
-            gene_col_in_var_hint=self._gene_col_in_var_hint,
-            callback=self._additional_features_callback,
+            additional_features_callback=self._additional_features_callback,
+            gene_names_callback=self._gene_names_callback,
             input_ids_dtype=self._input_ids_dtype,
         )
 
