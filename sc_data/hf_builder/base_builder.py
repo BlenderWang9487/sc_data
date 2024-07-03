@@ -20,6 +20,8 @@ class BuilderConfig:
         if self.num_workers <= 0:
             raise ValueError("num_workers must be positive")
 
+        self.cache_dir = str(self.cache_dir) if self.cache_dir is not None else None
+
 
 class BaseBuilder(abc.ABC):
     def __init__(self, config: BuilderConfig, **kwargs):
