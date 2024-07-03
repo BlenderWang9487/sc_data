@@ -39,7 +39,7 @@ class KiruaCellTypeFeatureCallback(BaseKiruaAdditionalFeaturesCallback):
 
 
 class KiruaSequentialCallback(BaseKiruaAdditionalFeaturesCallback):
-    def __init__(self, callbacks: list[str]) -> None:
+    def __init__(self, callbacks: list[AdditionalFeaturesCallbackType]) -> None:
         self._callbacks = callbacks
 
     def __call__(

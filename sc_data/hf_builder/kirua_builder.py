@@ -163,6 +163,28 @@ class KiruaBuilder(BaseBuilder):
             else KiruaGeneralGeneNamesCallback()
         )
 
+    @property
+    def additional_features_callback(self):
+        return self._additional_features_callback
+
+    @additional_features_callback.setter
+    def additional_features_callback(
+        self, callback: AdditionalFeaturesCallbackType | None
+    ):
+        if self._additional_features_callback is not None:
+            warn("Overwriting the old additional_features_callback")
+        self._additional_features_callback = callback
+
+    @property
+    def gene_names_callback(self):
+        return self._gene_names_callback
+
+    @gene_names_callback.setter
+    def gene_names_callback(self, callback: GeneNamesCallbackType | None):
+        if self._gene_names_callback is not None:
+            warn("Overwriting the old gene_names_callback")
+        self._gene_names_callback = callback
+
     def add_files(self, files: Iterable[str]) -> "KiruaBuilder":
         for f in files:
             file = Path(f)
