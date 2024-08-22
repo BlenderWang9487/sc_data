@@ -199,6 +199,10 @@ class KiruaBuilder(BaseBuilder):
             self._files.add(file)
         return self
 
+    def filter_files(self, filter_func: Callable[[str], bool]) -> "KiruaBuilder":
+        self._files = set(filter(filter_func, self._files))
+        return self
+
     @property
     def files(self):
         return sorted(list(self._files))
