@@ -4,15 +4,28 @@ from typing import Any, Callable, Generator, Iterable
 import pandas as pd
 from anndata import AnnData
 
+FeaturesDict = dict[str, Any]
+
 #### Additional features callbacks section ####
-AdditionalFeaturesCallbackType = Callable[[AnnData, int, int], dict[str, Any]]
+AdditionalFeaturesCallbackType = Callable[[AnnData, int, int, FeaturesDict], FeaturesDict]
 
 
 class BaseKiruaAdditionalFeaturesCallback(abc.ABC):
     @abc.abstractmethod
     def __call__(
-        self, adata: AnnData, dataset_idx: int, cell_idx: int
-    ) -> dict[str, Any]:
+        self, adata: AnnData, dataset_idx: int, cell_idx: int, current_features: FeaturesDict
+    ) -> FeaturesDict:
+        """
+        Args:
+            adata: AnnData object
+            dataset_idx: index of the dataset
+            cell_idx: index of the cell in the dataset
+            current_features: current features dictionary of the cell
+
+        Returns:
+            FeaturesDict: updated features dictionary of the cell 
+                (which contains the new features and the old ones)
+        """
         raise NotImplementedError
 
 
@@ -28,14 +41,13 @@ class KiruaCellTypeFeatureCallback(BaseKiruaAdditionalFeaturesCallback):
         self._na_value = na_value
 
     def __call__(
-        self, adata: AnnData, dataset_idx: int, cell_idx: int
-    ) -> dict[str, Any]:
+        self, adata: AnnData, dataset_idx: int, cell_idx: int, current_features: FeaturesDict
+    ) -> FeaturesDict:
         cell_type = adata.obs[self._cell_type_col].iloc[cell_idx]
         if not isinstance(cell_type, str):
             cell_type = self._na_value
-        return {
-            self._dataset_col: cell_type,
-        }
+        current_features[self._dataset_col] = cell_type
+        return current_features
 
 
 class KiruaSequentialCallback(BaseKiruaAdditionalFeaturesCallback):
@@ -43,12 +55,11 @@ class KiruaSequentialCallback(BaseKiruaAdditionalFeaturesCallback):
         self._callbacks = callbacks
 
     def __call__(
-        self, adata: AnnData, dataset_idx: int, cell_idx: int
-    ) -> dict[str, Any]:
-        result = dict()
+        self, adata: AnnData, dataset_idx: int, cell_idx: int, current_features: FeaturesDict
+    ) -> FeaturesDict:
         for callback in self._callbacks:
-            result.update(callback(adata, dataset_idx, cell_idx))
-        return result
+            current_features = callback(adata, dataset_idx, cell_idx, current_features)
+        return current_features
 
 
 #### Gene names callbacks section ####
