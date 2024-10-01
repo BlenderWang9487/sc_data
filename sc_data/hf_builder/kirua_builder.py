@@ -117,7 +117,11 @@ def _kirua_generator(
                     # current features are also passed to the callback, since some
                     # features may need input_ids or exprs to generate new features
                     # for example, num of expressed genes, or species (can infer from the input_ids)
-                    features = additional_features_callback(adata, dataset_idx, cell_idx, features)
+                    features = additional_features_callback(
+                        adata, dataset_idx, cell_idx, features
+                    )
+                    if features is None:
+                        continue
                 yield features
 
             del x_sparse
