@@ -90,7 +90,11 @@ class BaseKiruaGeneNamesCallback(abc.ABC):
 
 
 class KiruaGeneralGeneNamesCallback(BaseKiruaGeneNamesCallback):
-    def __init__(self, gene_col_in_var_hint: str | list[str] | None = None) -> None:
+    def __init__(
+        self,
+        gene_col_in_var_hint: str | list[str] | None = None,
+        remove_version: bool = False,
+    ) -> None:
         if isinstance(gene_col_in_var_hint, str):
             gene_col_in_var_hint = [gene_col_in_var_hint]
         elif isinstance(gene_col_in_var_hint, list) or gene_col_in_var_hint is None:
@@ -100,6 +104,7 @@ class KiruaGeneralGeneNamesCallback(BaseKiruaGeneNamesCallback):
                 "gene_col_in_var_hint must be a str, a list of str, or None"
             )
         self._gene_col_in_var_hint = gene_col_in_var_hint
+        self._remove_version = remove_version
 
     def __call__(self, adata: AnnData, dataset_idx: int) -> Iterable[str]:
         from warnings import warn
@@ -118,4 +123,9 @@ class KiruaGeneralGeneNamesCallback(BaseKiruaGeneNamesCallback):
                 f"fallback to adata.var_names instead"
             )
             adata_gene_col = adata.var_names
+
+        if self._remove_version:
+            # ensembl id sometime comes with version postfix, remove it
+            # e.g. ENSG00000123456.1 -> ENSG00000123456
+            adata_gene_col = [gene.split(".")[0] for gene in adata_gene_col]
         return adata_gene_col
