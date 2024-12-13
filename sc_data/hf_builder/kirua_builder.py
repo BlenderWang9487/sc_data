@@ -58,11 +58,16 @@ def _kirua_generator(
         adata = ad.read_h5ad(h5ad_file, backed=backed_mode)
 
         # get the gene names from the adata
-        adata_gene_col = pd.Series(gene_names_callback(adata, dataset_idx))
+        adata_gene_col = pd.Series(
+            gene_names_callback(adata if not use_raw else adata.raw, dataset_idx)
+        )
 
         # filter the gene names based on `gene_names`
         gene2id = {gene: i for i, gene in enumerate(gene_names)}
         var_filter = adata_gene_col.isin(gene2id)
+        print(
+            f"dataset idx: {dataset_idx}, {var_filter.sum()}/{len(var_filter)} genes are found, ratio: {var_filter.mean():.2%}"
+        )
 
         filtered_gene_col = adata_gene_col[var_filter]
         input_ids_array = filtered_gene_col.map(gene2id).values.astype(input_ids_dtype)
@@ -70,6 +75,9 @@ def _kirua_generator(
         chunks = list(range(0, len(adata), chunk_size))
 
         X = adata.X if not use_raw else adata.raw.X
+        assert X.shape[1] == len(
+            adata_gene_col
+        ), f"X and gene names size mismatch, {X.shape[1]} != {len(adata_gene_col)}"
         if backed_mode is not None and not isinstance(X, CSRDataset):
             warn(
                 f"You are using backed mode: {backed_mode}, but the X is not in CSR format"
