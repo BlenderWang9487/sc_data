@@ -9,7 +9,15 @@ import anndata as ad
 import datasets
 import numpy as np
 import pandas as pd
-from anndata._core.sparse_dataset import CSRDataset
+
+# from 0.11.0, the CSRDataset is moved to anndata.abc and no longer in anndata._core.sparse_dataset
+from packaging.version import Version
+
+if Version(ad.__version__) < Version("0.11.0"):
+    from anndata._core.sparse_dataset import CSRDataset
+else:
+    from anndata.abc import CSRDataset
+
 from scipy.sparse import csr_matrix
 
 from .base_builder import BaseBuilder, BuilderConfig
@@ -110,7 +118,7 @@ def _kirua_generator(
                 # datasets.Array2D somehow very fast compare to datasets.Sequence(datasets.Value)
                 #  if we "strickly specify" the datasets.Features. But if we don', this 1d np.ndarray
                 #  will be auto detected as datasets.Sequence(datasets.Value) and keep the same speed as datasets.Array2D
-                # This is a bit weird, but it's fine for us to not specifiy Features type for now
+                # This is a bit weird, but it's fine for us to not specify Features type for now
                 features = {
                     "input_ids": input_ids,
                     "exprs": exprs,
@@ -128,6 +136,9 @@ def _kirua_generator(
                     features = additional_features_callback(
                         adata, dataset_idx, cell_idx, features
                     )
+
+                    # this condition make features_callback more flexible
+                    # now features_callback can also be a filter to skip some cells
                     if features is None:
                         continue
                 yield features
